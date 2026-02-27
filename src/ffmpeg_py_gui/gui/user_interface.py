@@ -42,6 +42,8 @@ class UserInterface(QMainWindow):
 
         self.backend = FFmpegBackend(self)
 
+        self.codec_list = []  # type: ignore
+
         self.setWindowTitle("FFmpeg VA-API Converter")
         self.resize(1000, 700)
 
@@ -116,19 +118,18 @@ class UserInterface(QMainWindow):
         tab1_layout.addWidget(QLabel("(lower = better quality, larger file)"))
 
         self.codec_combo = QComboBox()
-        self.codec_combo.addItems(
-            [
-                "H.265 (hevc_vaapi)",
-                "H.264 (h264_vaapi)",
-                "AV1 (av1_vaapi)",
-            ],
-        )
         tab1_layout.addWidget(QLabel("Codec"))
         tab1_layout.addWidget(self.codec_combo)
 
-        self.hw_checkbox = QCheckBox("Use hardware acceleration (VA-API)")
-        self.hw_checkbox.setChecked(True)
-        tab1_layout.addWidget(self.hw_checkbox)
+        self.hw_vaapi_checkbox = QCheckBox("Use hardware acceleration (VA-API)")
+        self.hw_vaapi_checkbox.setChecked(False)
+        self.hw_vaapi_checkbox.stateChanged.connect(self.apply_filter_vaapi)
+        tab1_layout.addWidget(self.hw_vaapi_checkbox)
+
+        self.hw_vulkan_checkbox = QCheckBox("Use hardware acceleration (VULKAN)")
+        self.hw_vulkan_checkbox.setChecked(False)
+        self.hw_vulkan_checkbox.stateChanged.connect(self.apply_filter_vulkan)
+        tab1_layout.addWidget(self.hw_vulkan_checkbox)
 
         self.audio_checkbox = QCheckBox("Copy audio")
         self.audio_checkbox.setChecked(True)
@@ -137,6 +138,10 @@ class UserInterface(QMainWindow):
         self.sub_checkbox = QCheckBox("Copy subtitles")
         self.sub_checkbox.setChecked(True)
         tab1_layout.addWidget(self.sub_checkbox)
+
+        self.overwrite_checkbox = QCheckBox("Overwrite file if it already exists")
+        self.overwrite_checkbox.setChecked(True)
+        tab1_layout.addWidget(self.overwrite_checkbox)
 
         # Output folder
         output_layout = QHBoxLayout()
@@ -192,6 +197,10 @@ class UserInterface(QMainWindow):
         color_button = QPushButton("Choose Color")
         color_button.clicked.connect(self.choose_color)  # pylint: disable=no-member
         tab2_layout.addWidget(color_button)
+
+        self.get_codec_button = QPushButton("Get Supported Codecs")
+        self.get_codec_button.clicked.connect(self.get_codecs)  # pylint: disable=no-member
+        tab1_layout.addWidget(self.get_codec_button)
 
         tab2_layout.addStretch()
 
@@ -324,14 +333,9 @@ class UserInterface(QMainWindow):
         input_file = str(self.added_files[0])
         output_file = str(Path(self.output_edit.text()) / "output.mp4")
 
-        command = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            input_file,
+        extra_args = [
             "-c:v",
             "libx264",
-            output_file,
         ]
 
         # Busy indicator ON
@@ -339,7 +343,21 @@ class UserInterface(QMainWindow):
         self.progress_bar.setRange(0, 0)
         self.status_label.setText("Status: Running...")
 
-        self.backend.run_command(command)
+        self.backend.run_conversion(input_file, output_file, extra_args)
+
+    def get_codecs(self) -> None:
+        """Fetches the available codecs from the backend."""
+        self.backend.run_get_codecs()
+
+    def update_codec_list(self, codecs: list[dict]) -> None:
+
+        self.codec_combo.clear()
+        self.codec_list.clear()
+        for codec in codecs:
+            description = codec["description"] if len(codec["description"]) < 50 else f"{codec['description'][:50]}..."
+            codec_list_entry = f"{codec['codec']} - {description}"
+            self.codec_list.append(codec_list_entry)
+            self.codec_combo.addItem(codec_list_entry)
 
     def update_progress(self, value: float) -> None:
         """Update progress bar with a value between 0 and 1.
@@ -386,6 +404,30 @@ class UserInterface(QMainWindow):
     def stop_spinner(self) -> None:
         """Stop animated spinner indicator."""
         self.loading_overlay.stop()
+
+    def apply_filter_vaapi(self):
+        self.codec_combo.clear()
+
+        if self.hw_vaapi_checkbox.isChecked():
+            # Contains "vaapi" (case insensitive)
+            for codec in self.codec_list:
+                if "_vaapi" in codec.split()[0].lower():
+                    self.codec_combo.addItem(codec)
+        else:
+            # Show everything
+            self.codec_combo.addItems(self.codec_list)
+
+    def apply_filter_vulkan(self):
+        self.codec_combo.clear()
+
+        if self.hw_vulkan_checkbox.isChecked():
+            # Contains "vaapi" (case insensitive)
+            for codec in self.codec_list:
+                if "_vulkan" in codec.split()[0].lower():
+                    self.codec_combo.addItem(codec)
+        else:
+            # Show everything
+            self.codec_combo.addItems(self.codec_list)
 
 
 class LoadingOverlay(QWidget):
