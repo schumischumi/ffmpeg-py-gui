@@ -143,6 +143,14 @@ def format(ctx: Context) -> None:
 
 
 @duty
+def lint(ctx: Context) -> None:
+    """Run static analysis: pylint on src, pylint on tests, mypy on src"""
+    ctx.run("pylint src --rcfile=pyproject.toml", title="Pylint src")
+    ctx.run("pylint tests --rcfile=pyproject.toml", title="Pylint tests", nofail=True)
+    ctx.run("mypy src --config-file pyproject.toml", title="mypy")
+
+
+@duty
 def build(ctx: Context) -> None:
     """Build source and wheel distributions."""
     ctx.run(

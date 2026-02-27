@@ -28,7 +28,8 @@ actions = \
 	run \
 	setup \
 	test \
-	vscode
+	vscode \
+	lint
 
 .PHONY: $(actions)
 $(actions):

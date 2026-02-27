@@ -1,3 +1,5 @@
+"""Module for debugging and retrieving environment information."""
+
 from __future__ import annotations
 
 import os

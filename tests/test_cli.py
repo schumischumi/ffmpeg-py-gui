@@ -34,7 +34,7 @@ def test_show_version(capsys: pytest.CaptureFixture) -> None:
     with pytest.raises(SystemExit):
         main(["-V"])
     captured = capsys.readouterr()
-    assert debug._get_version() in captured.out
+    assert debug._get_version() in captured.out  # pylint: disable=protected-access
 
 
 def test_show_debug_info(capsys: pytest.CaptureFixture) -> None:

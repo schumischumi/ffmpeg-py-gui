@@ -1,34 +1,46 @@
+"""User interface for ffmpeg-py-gui."""
 
-import threading
-import tkinter as tk
 from pathlib import Path
-import urllib.parse   # to handle file:// URIs
-import os
+from typing import Any
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QMovie, QResizeEvent
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QMainWindow, QFileDialog,
-    QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QTabWidget,
-    QComboBox, QSpinBox, QCheckBox, QLineEdit,
-    QProgressBar, QTextEdit, QSlider, QColorDialog,
-    QHeaderView
+    QAbstractItemView,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QProgressBar,
+    QPushButton,
+    QSlider,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+
 from ffmpeg_py_gui._internal.ffmpeg_api import FFmpegBackend
-from PySide6.QtGui import QMovie
-from PySide6.QtWidgets import QLabel
-from PySide6.QtCore import QSize
+
 
 # Global state
+# pylint: disable=too-many-instance-attributes
 class UserInterface(QMainWindow):
     """Main application window (PySide6 version)."""
 
-    def __init__(self):
+    # pylint: disable=too-many-statements, too-many-locals
+    def __init__(self) -> None:
         super().__init__()
 
         self.backend = FFmpegBackend(self)
-
-        
 
         self.setWindowTitle("FFmpeg VA-API Converter")
         self.resize(1000, 700)
@@ -56,20 +68,21 @@ class UserInterface(QMainWindow):
         self.file_table.setColumnCount(3)
         self.file_table.setHorizontalHeaderLabels(["Filename", "Size", ""])
         self.file_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch
+            0,
+            QHeaderView.ResizeMode.Stretch,
         )
-        self.file_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.file_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.file_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.file_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
         left_layout.addWidget(self.file_table)
 
         button_layout = QHBoxLayout()
 
         add_button = QPushButton("Add Files...")
-        add_button.clicked.connect(self.open_file_dialog)
+        add_button.clicked.connect(self.open_file_dialog)  # pylint: disable=no-member
 
         clear_button = QPushButton("Clear List")
-        clear_button.clicked.connect(self.clear_list)
+        clear_button.clicked.connect(self.clear_list)  # pylint: disable=no-member
 
         button_layout.addWidget(add_button)
         button_layout.addWidget(clear_button)
@@ -89,7 +102,7 @@ class UserInterface(QMainWindow):
 
         self.preset_combo = QComboBox()
         self.preset_combo.addItems(
-            ["Very Fast", "Fast", "Medium", "Slow", "Very Slow"]
+            ["Very Fast", "Fast", "Medium", "Slow", "Very Slow"],
         )
         self.preset_combo.setCurrentText("Medium")
         tab1_layout.addWidget(QLabel("Preset"))
@@ -103,11 +116,13 @@ class UserInterface(QMainWindow):
         tab1_layout.addWidget(QLabel("(lower = better quality, larger file)"))
 
         self.codec_combo = QComboBox()
-        self.codec_combo.addItems([
-            "H.265 (hevc_vaapi)",
-            "H.264 (h264_vaapi)",
-            "AV1 (av1_vaapi)"
-        ])
+        self.codec_combo.addItems(
+            [
+                "H.265 (hevc_vaapi)",
+                "H.264 (h264_vaapi)",
+                "AV1 (av1_vaapi)",
+            ],
+        )
         tab1_layout.addWidget(QLabel("Codec"))
         tab1_layout.addWidget(self.codec_combo)
 
@@ -127,7 +142,7 @@ class UserInterface(QMainWindow):
         output_layout = QHBoxLayout()
         self.output_edit = QLineEdit(str(Path.home() / "Videos"))
         browse_button = QPushButton("Browse...")
-        browse_button.clicked.connect(self.browse_output_folder)
+        browse_button.clicked.connect(self.browse_output_folder)  # pylint: disable=no-member
 
         output_layout.addWidget(self.output_edit)
         output_layout.addWidget(browse_button)
@@ -135,7 +150,7 @@ class UserInterface(QMainWindow):
         tab1_layout.addLayout(output_layout)
 
         self.start_button = QPushButton("Start Conversion")
-        self.start_button.clicked.connect(self.start_conversion)
+        self.start_button.clicked.connect(self.start_conversion)  # pylint: disable=no-member
         tab1_layout.addWidget(self.start_button)
 
         self.progress_bar = QProgressBar()
@@ -169,13 +184,13 @@ class UserInterface(QMainWindow):
 
         tab2_layout.addWidget(QLabel("Tab 2 – Settings / Preview"))
 
-        self.threshold_slider = QSlider(Qt.Horizontal)
+        self.threshold_slider = QSlider(Qt.Orientation.Horizontal)
         self.threshold_slider.setRange(0, 100)
         self.threshold_slider.setValue(50)
         tab2_layout.addWidget(self.threshold_slider)
 
         color_button = QPushButton("Choose Color")
-        color_button.clicked.connect(self.choose_color)
+        color_button.clicked.connect(self.choose_color)  # pylint: disable=no-member
         tab2_layout.addWidget(color_button)
 
         tab2_layout.addStretch()
@@ -191,7 +206,7 @@ class UserInterface(QMainWindow):
         tab3_layout.addWidget(self.log_edit)
 
         clear_log_button = QPushButton("Clear Log")
-        clear_log_button.clicked.connect(self.log_edit.clear)
+        clear_log_button.clicked.connect(self.log_edit.clear)  # pylint: disable=no-member
         tab3_layout.addWidget(clear_log_button)
 
         # Add tabs
@@ -206,11 +221,21 @@ class UserInterface(QMainWindow):
     # --------------------------------------------------
     # Drag & Drop (Native Linux Support)
     # --------------------------------------------------
-    def dragEnterEvent(self, event):
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Handle drag enter event.
+
+        Args:
+            event (QDragEnterEvent): The drag enter event.
+        """
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
-    def dropEvent(self, event):
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Handle file drop event.
+
+        Args:
+            event (QDropEvent): The drop event.
+        """
         for url in event.mimeData().urls():
             path = Path(url.toLocalFile())
             if path.exists():
@@ -219,32 +244,40 @@ class UserInterface(QMainWindow):
     # --------------------------------------------------
     # File Handling
     # --------------------------------------------------
-    def open_file_dialog(self):
+    def open_file_dialog(self) -> None:
+        """Open a file dialog and select video files."""
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Files",
             str(Path.home()),
-            "Video Files (*.mp4 *.mkv *.avi *.mov *.webm *.ts)"
+            "Video Files (*.mp4 *.mkv *.avi *.mov *.webm *.ts)",
         )
         self.add_files([Path(f) for f in files])
 
-    def browse_output_folder(self):
+    def browse_output_folder(self) -> None:
+        """Browse for an output folder."""
         folder = QFileDialog.getExistingDirectory(
             self,
             "Select Output Folder",
-            self.output_edit.text()
+            self.output_edit.text(),
         )
         if folder:
             self.output_edit.setText(folder)
 
-    def add_files(self, paths: list[Path]):
+    def add_files(self, paths: list[Path]) -> None:
+        """Add files to the UI.
+
+        Args:
+            paths (list[Path]): List of paths to add.
+        """
         for path in paths:
             if path.is_file() and path not in self.added_files:
                 self.added_files.append(path)
 
         self.refresh_file_list()
 
-    def refresh_file_list(self):
+    def refresh_file_list(self) -> None:
+        """Refresh the file list in the UI."""
         self.file_table.setRowCount(len(self.added_files))
 
         for row, path in enumerate(self.added_files):
@@ -253,29 +286,37 @@ class UserInterface(QMainWindow):
             self.file_table.setItem(row, 1, QTableWidgetItem(f"{size_mb:.1f} MB"))
 
             remove_button = QPushButton("X")
-            remove_button.clicked.connect(
-                lambda _, p=path: self.remove_file(p)
+            remove_button.clicked.connect(  # pylint: disable=no-member
+                lambda _, p=path: self.remove_file(p),
             )
             self.file_table.setCellWidget(row, 2, remove_button)
 
-    def remove_file(self, path: Path):
+    def remove_file(self, path: Path) -> None:
+        """Remove file from list
+
+        Args:
+            path (Path): Path to file
+        """
         if path in self.added_files:
             self.added_files.remove(path)
             self.refresh_file_list()
 
-    def clear_list(self):
+    def clear_list(self) -> None:
+        """Clean file list"""
         self.added_files.clear()
         self.refresh_file_list()
 
     # --------------------------------------------------
     # Misc
     # --------------------------------------------------
-    def choose_color(self):
+    def choose_color(self) -> None:
+        """Open a color dialog and log the selected color."""
         color = QColorDialog.getColor()
         if color.isValid():
             self.log_edit.append(f"Selected color: {color.name()}")
 
-    def start_conversion(self):
+    def start_conversion(self) -> None:
+        """Starts the conversion process."""
         if not self.added_files:
             self.status_label.setText("Status: No files selected")
             return
@@ -286,61 +327,76 @@ class UserInterface(QMainWindow):
         command = [
             "ffmpeg",
             "-y",
-            "-i", input_file,
-            "-c:v", "libx264",
-            output_file
+            "-i",
+            input_file,
+            "-c:v",
+            "libx264",
+            output_file,
         ]
 
         # Busy indicator ON
-        self.start_spinner()
+        # self.start_spinner()
         self.progress_bar.setRange(0, 0)
         self.status_label.setText("Status: Running...")
-        
 
         self.backend.run_command(command)
 
+    def update_progress(self, value: float) -> None:
+        """Update progress bar with a value between 0 and 1.
 
-    def update_progress(self, value: float):
+        Args:
+            value (float): Value between 0 and 1.
+        """
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(int(value * 100))
 
+    def append_log(self, line: str) -> None:
+        """Append a line to the log edit widget.
 
-    def append_log(self, line: str):
+        Args:
+           line (str): Line to append.
+        """
         self.log_edit.append(line)
 
+    def command_finished(self, exit_code: int) -> None:
+        """Handle command finished signal.
 
-    def command_finished(self, exit_code: int):
+        Args:
+            exit_code (int): Exit code of the command.
+        """
         self.stop_spinner()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(100)
         self.status_label.setText(f"Finished (exit code {exit_code})")
 
+    def show_error(self, message: str) -> None:
+        """Show error message in UI.
 
-    def show_error(self, message: str):
+        Args:
+            message (str): Error message to display.
+        """
         self.status_label.setText("Error occurred")
         self.log_edit.append(f"ERROR: {message}")
         self.stop_spinner()
 
-    def start_spinner(self):
+    def start_spinner(self) -> None:
         """Start animated spinner indicator."""
         self.loading_overlay.start("test")
 
-
-    def stop_spinner(self):
+    def stop_spinner(self) -> None:
         """Stop animated spinner indicator."""
         self.loading_overlay.stop()
 
 
 class LoadingOverlay(QWidget):
-    """
-    Semi-transparent full-window overlay with centered spinner.
+    """Semi-transparent full-window overlay with centered spinner.
     Blocks interaction while visible.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Any = None) -> None:
         super().__init__(parent)
 
-        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("""
             background-color: rgba(0, 0, 0, 120);
         """)
@@ -348,14 +404,14 @@ class LoadingOverlay(QWidget):
         self.setVisible(False)
 
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.spinner_label = QLabel()
-        self.spinner_label.setAlignment(Qt.AlignCenter)
+        self.spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.text_label = QLabel("Working...")
         self.text_label.setStyleSheet("color: white; font-size: 16px;")
-        self.text_label.setAlignment(Qt.AlignCenter)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.movie = QMovie("loading.gif")
         self.movie.setScaledSize(QSize(64, 64))
@@ -364,16 +420,27 @@ class LoadingOverlay(QWidget):
         layout.addWidget(self.spinner_label)
         layout.addWidget(self.text_label)
 
-    def start(self, text="Working..."):
+    def start(self, text: str = "Working...") -> None:
+        """Start loading animation
+
+        Args:
+            text (str): Text to show under the animation
+        """
         self.text_label.setText(text)
-        self.setGeometry(self.parent().rect())
+        self.setGeometry(self.parent().rect())  # type: ignore[attr-defined]
         self.show()
         self.movie.start()
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop loading animation"""
         self.movie.stop()
         self.hide()
 
-    def resizeEvent(self, event):
-        self.setGeometry(self.parent().rect())
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Resize the widget to fit its parent.
+
+        Args:
+            event (QResizeEvent): The resize event.
+        """
+        self.setGeometry(self.parent().rect())  # type: ignore[attr-defined]
         super().resizeEvent(event)
