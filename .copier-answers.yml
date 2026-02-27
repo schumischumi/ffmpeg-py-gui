@@ -1,0 +1,19 @@
+# Changes here will be overwritten by Copier.
+_commit: 1.11.14
+_src_path: https://github.com/pawamoy/copier-uv.git
+author_email: sebastian.schumacher@protonmail.com
+author_fullname: schumischumi
+author_username: schumischumi
+copyright_date: '2026'
+copyright_holder: schumischumi
+copyright_holder_email: sebastian.schumacher@protonmail.com
+copyright_license: MIT
+project_description: a simple ffmpeg py gui
+project_name: ffmpeg-py-gui
+python_package_command_line_name: ffmpeg-py-gui
+python_package_distribution_name: ffmpeg-py-gui
+python_package_import_name: ffmpeg_py_gui
+repository_name: ffmpeg-py-gui
+repository_namespace: schumischumi
+repository_provider: github.com
+
