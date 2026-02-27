@@ -12,7 +12,9 @@
 from __future__ import annotations
 
 import click
-import av
+import sys
+from PySide6.QtWidgets import (
+    QApplication)
 
 from ffmpeg_py_gui._internal import debug
 from ffmpeg_py_gui.gui.user_interface import UserInterface
@@ -53,6 +55,10 @@ def debug_info_callback(ctx, param, value) -> None:
 def main(gui) -> int:
     """Run the main program."""
     if gui:
-        UserInterface()
+        app = QApplication(sys.argv)
+        window = UserInterface()
+        window.show()
+        sys.exit(app.exec())
+
     return 0
 

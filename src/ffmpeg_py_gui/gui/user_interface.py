@@ -1,333 +1,249 @@
 
-from tkinterdnd2 import DND_FILES, TkinterDnD
 import threading
 import tkinter as tk
 from pathlib import Path
 import urllib.parse   # to handle file:// URIs
 import os
-import dearpygui.dearpygui as dpg
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QMainWindow, QFileDialog,
+    QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
+    QTableWidget, QTableWidgetItem, QTabWidget,
+    QComboBox, QSpinBox, QCheckBox, QLineEdit,
+    QProgressBar, QTextEdit, QSlider, QColorDialog,
+    QHeaderView
+)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 
 # Global state
+class UserInterface(QMainWindow):
+    """Main application window (PySide6 version)."""
 
-FILE_DIALOG_TAG = "file_dialog_multi"
-class UserInterface:
-    """Class to manage the user interface."""
     def __init__(self):
-        dpg.create_context()
+        super().__init__()
+
+        self.setWindowTitle("FFmpeg VA-API Converter")
+        self.resize(1000, 700)
+
         self.added_files: list[Path] = []
 
-        dpg.add_file_dialog(
-            directory_selector=False,
-            show=False,
-            callback=lambda sender, app_data, user_data: self.add_files(app_data["file_path_name"]),
-            cancel_callback=lambda s, a: print("File dialog cancelled"),
-            tag=FILE_DIALOG_TAG,
-            width=750,
-            height=500,
-            modal=True,
+        # Enable native drag & drop
+        self.setAcceptDrops(True)
+
+        # --- Main Layout ---
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QHBoxLayout(central_widget)
+
+        # ------------------------
+        # LEFT PANEL (File List)
+        # ------------------------
+        left_layout = QVBoxLayout()
+
+        left_layout.addWidget(QLabel("Input Files"))
+
+        self.file_table = QTableWidget()
+        self.file_table.setColumnCount(3)
+        self.file_table.setHorizontalHeaderLabels(["Filename", "Size", ""])
+        self.file_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch
         )
+        self.file_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.file_table.setEditTriggers(QTableWidget.NoEditTriggers)
 
-        # Optional: better scaling on high-DPI
-        #dpg.set_global_font_scale(1.1)  # or detect DPI and adjust
+        left_layout.addWidget(self.file_table)
 
-        with dpg.window(tag="MainWindow", label="Converter", no_title_bar=True, no_resize=True, no_move=True):
-            dpg.add_text("Two side-by-side panels (resizable)")
-            dpg.add_separator()
+        button_layout = QHBoxLayout()
 
-            # Horizontal group to place children next to each other
-            with dpg.group(horizontal=True):
-                # Left child window
-                with dpg.child_window(tag="LeftPanel", border=True, horizontal_scrollbar=True):
-                    dpg.add_text("Input Files", bullet=True)
-                    dpg.add_separator()
+        add_button = QPushButton("Add Files...")
+        add_button.clicked.connect(self.open_file_dialog)
 
-                    with dpg.table(
-                        header_row=True,
-                        borders_outerH=True,
-                        borders_outerV=True,
-                        borders_innerH=True,
-                        borders_innerV=True,
-                        policy=dpg.mvTable_SizingStretchProp,
-                        tag="file_list_table",
-                        resizable=True,
-                        reorderable=False,
-                        # Optional: makes it nicer
-                        row_background=True,
-                        height=400,
-                    ):
-                        # Filename – takes most space, user can resize/reorder
-                        dpg.add_table_column(
-                            label="Filename"
-                        )
+        clear_button = QPushButton("Clear List")
+        clear_button.clicked.connect(self.clear_list)
 
-                        # Size – fixed-ish, no real need to sort or hide
-                        dpg.add_table_column(
-                            label="Size"
-                        )
+        button_layout.addWidget(add_button)
+        button_layout.addWidget(clear_button)
 
-                        # Remove button column – narrow, fixed, no interaction except button
-                        dpg.add_table_column(
-                            label=""
-                        )
+        left_layout.addLayout(button_layout)
 
-                        # Initial empty table body
-                        with dpg.table_row(tag="file_list"):
-                            pass  # will be filled dynamically
-                    #dpg.set_item_drop_callback("file_list_table", self.drop_callback)
-                    dpg.add_spacer(height=8)
+        # ------------------------
+        # RIGHT PANEL (Tabs)
+        # ------------------------
+        tabs = QTabWidget()
 
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(label="Add Files...", callback=self.open_file_dialog)
-                        dpg.add_button(label="Clear List", callback=lambda: (globals().update(added_files=[]), self.refresh_file_list()))
+        # --- Tab 1 ---
+        tab1 = QWidget()
+        tab1_layout = QVBoxLayout(tab1)
 
+        tab1_layout.addWidget(QLabel("FFmpeg Encoding Settings"))
 
-                # Right child window
-                with dpg.child_window(tag="RightPanel", border=True):
-                    with dpg.tab_bar(tag="RightTabs"):
-                        with dpg.tab(label="Tab 1", tag="Tab1"):
-                            dpg.add_text("FFmpeg Encoding Settings", bullet=True)
-                            dpg.add_separator()
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItems(
+            ["Very Fast", "Fast", "Medium", "Slow", "Very Slow"]
+        )
+        self.preset_combo.setCurrentText("Medium")
+        tab1_layout.addWidget(QLabel("Preset"))
+        tab1_layout.addWidget(self.preset_combo)
 
-                            # Preset selector
-                            dpg.add_combo(
-                                label="Preset",
-                                items=["Very Fast", "Fast", "Medium", "Slow", "Very Slow"],
-                                default_value="Medium",
-                                width=200,
-                            )
+        self.crf_spin = QSpinBox()
+        self.crf_spin.setRange(0, 51)
+        self.crf_spin.setValue(23)
+        tab1_layout.addWidget(QLabel("CRF"))
+        tab1_layout.addWidget(self.crf_spin)
+        tab1_layout.addWidget(QLabel("(lower = better quality, larger file)"))
 
-                            dpg.add_input_int(label="CRF", default_value=23, min_value=0, max_value=51, width=120)
-                            dpg.add_text("(lower = better quality, larger file)")
+        self.codec_combo = QComboBox()
+        self.codec_combo.addItems([
+            "H.265 (hevc_vaapi)",
+            "H.264 (h264_vaapi)",
+            "AV1 (av1_vaapi)"
+        ])
+        tab1_layout.addWidget(QLabel("Codec"))
+        tab1_layout.addWidget(self.codec_combo)
 
-                            dpg.add_combo(
-                                label="Codec",
-                                items=["H.265 (hevc_vaapi)", "H.264 (h264_vaapi)", "AV1 (av1_vaapi)"],
-                                default_value="H.265 (hevc_vaapi)",
-                                width=220,
-                            )
+        self.hw_checkbox = QCheckBox("Use hardware acceleration (VA-API)")
+        self.hw_checkbox.setChecked(True)
+        tab1_layout.addWidget(self.hw_checkbox)
 
-                            dpg.add_checkbox(label="Use hardware acceleration (VA-API)", default_value=True)
-                            dpg.add_checkbox(label="Copy audio", default_value=True)
-                            dpg.add_checkbox(label="Copy subtitles", default_value=True)
+        self.audio_checkbox = QCheckBox("Copy audio")
+        self.audio_checkbox.setChecked(True)
+        tab1_layout.addWidget(self.audio_checkbox)
 
-                            dpg.add_spacer(height=12)
+        self.sub_checkbox = QCheckBox("Copy subtitles")
+        self.sub_checkbox.setChecked(True)
+        tab1_layout.addWidget(self.sub_checkbox)
 
-                            dpg.add_input_text(label="Output folder", default_value=str(Path.home() / "Videos"), width=300)
-                            dpg.add_button(label="Browse...", width=80)
+        # Output folder
+        output_layout = QHBoxLayout()
+        self.output_edit = QLineEdit(str(Path.home() / "Videos"))
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self.browse_output_folder)
 
-                            dpg.add_spacer(height=20)
-                            dpg.add_button(label="Start Conversion", width=180, height=40)
+        output_layout.addWidget(self.output_edit)
+        output_layout.addWidget(browse_button)
 
-                            dpg.add_progress_bar(width=300, height=20, default_value=0.0, tag="progress_bar")
-                            dpg.add_text("Status: Idle", tag="status_text")
+        tab1_layout.addLayout(output_layout)
 
-                        with dpg.tab(label="Tab 2", tag="Tab2"):
-                            dpg.add_text("Tab 2 – Settings / Preview")
-                            dpg.add_slider_float(label="Threshold", default_value=0.5, min_value=0.0, max_value=1.0)
-                            dpg.add_color_edit(label="Color", default_value=[1.0, 0.5, 0.2, 1.0])
-                            dpg.add_text("Some preview area could go here...")
+        self.start_button = QPushButton("Start Conversion")
+        tab1_layout.addWidget(self.start_button)
 
-                        with dpg.tab(label="Tab 3", tag="Tab3"):
-                            dpg.add_text("Tab 3 – Logs / Output")
-                            dpg.add_input_text(label="Log", multiline=True, height=180, readonly=True)
-                            dpg.add_button(label="Clear Log")
-        dpg.create_viewport(title="FFmpeg VA-API Converter", width=600, height=200)
-        dpg.setup_dearpygui()
-        dpg.set_primary_window("MainWindow", True)
-        # Register resize handler (most reliable way to react to size changes)
-        with dpg.item_handler_registry(tag="resize_handler"):          # ← give it a tag here
-            dpg.add_item_resize_handler(callback=self.resize_windows)
+        self.progress_bar = QProgressBar()
+        tab1_layout.addWidget(self.progress_bar)
 
-        # ... later, after creating the window ...
-        dpg.bind_item_handler_registry("MainWindow", "resize_handler")
-        dpg.show_viewport()
+        self.status_label = QLabel("Status: Idle")
+        tab1_layout.addWidget(self.status_label)
 
-        # Initial refresh (empty list)
-        self.refresh_file_list()
+        tab1_layout.addStretch()
 
-        dpg.start_dearpygui()
-        dpg.destroy_context()
+        # --- Tab 2 ---
+        tab2 = QWidget()
+        tab2_layout = QVBoxLayout(tab2)
 
-    def resize_windows(self, sender, app_data, user_data):
-        """Called whenever the primary window resizes"""
-        # Get current size of the parent container (primary window)
-        parent_width = dpg.get_item_width("MainWindow")
-        parent_height = dpg.get_item_height("MainWindow")
+        tab2_layout.addWidget(QLabel("Tab 2 – Settings / Preview"))
 
-        # Subtract a little padding/margin if you want (optional)
-        margin = 8          # small padding on sides + between children
-        half_width = (parent_width - margin * 3) // 2   # roughly 50/50 split
+        self.threshold_slider = QSlider(Qt.Horizontal)
+        self.threshold_slider.setRange(0, 100)
+        self.threshold_slider.setValue(50)
+        tab2_layout.addWidget(self.threshold_slider)
 
-        # Apply to both child windows (height = almost full parent height)
-        dpg.configure_item("LeftPanel", width=half_width, height=parent_height - 10)
-        dpg.configure_item("RightPanel", width=half_width, height=parent_height - 10)
+        color_button = QPushButton("Choose Color")
+        color_button.clicked.connect(self.choose_color)
+        tab2_layout.addWidget(color_button)
 
-    def add_files(self, paths: list[str]) -> None:
-        """Add files to the list (called from drag & drop or file dialog)."""
+        tab2_layout.addStretch()
 
-        new_paths = []
-        for p in paths:
-            path = Path(p)
-            if path.is_file() and path not in self.added_files:
-                # You can add more filtering here (video extensions, size, etc.)
-                if path.suffix.lower() in {".mp4", ".mkv", ".avi", ".mov", ".webm", ".ts"}:
-                    new_paths.append(path)
+        # --- Tab 3 ---
+        tab3 = QWidget()
+        tab3_layout = QVBoxLayout(tab3)
 
-        if new_paths:
-            self.added_files.extend(new_paths)
-            self.refresh_file_list()
+        tab3_layout.addWidget(QLabel("Tab 3 – Logs / Output"))
 
+        self.log_edit = QTextEdit()
+        self.log_edit.setReadOnly(True)
+        tab3_layout.addWidget(self.log_edit)
 
-    def refresh_file_list(self) -> None:
-        """Update the file list widget."""
-        if not dpg.does_item_exist("file_list"):
-            return
+        clear_log_button = QPushButton("Clear Log")
+        clear_log_button.clicked.connect(self.log_edit.clear)
+        tab3_layout.addWidget(clear_log_button)
 
-        dpg.delete_item("file_list", children_only=True)
+        # Add tabs
+        tabs.addTab(tab1, "Tab 1")
+        tabs.addTab(tab2, "Tab 2")
+        tabs.addTab(tab3, "Tab 3")
 
-        for path in self.added_files:
-            with dpg.table_row(parent="file_list"):
-                dpg.add_text(str(path.name))
-                dpg.add_text(f"{path.stat().st_size / (1024*1024):.1f} MB")
-                # You can add remove button later
-                # dpg.add_button(label="×", callback=remove_file, user_data=path)
+        # Add panels to main layout
+        main_layout.addLayout(left_layout, 1)
+        main_layout.addWidget(tabs, 1)
 
+    # --------------------------------------------------
+    # Drag & Drop (Native Linux Support)
+    # --------------------------------------------------
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
 
-    def open_file_dialog(self) -> None:
-        """Open system file chooser."""
-        dpg.show_item(FILE_DIALOG_TAG)
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            path = Path(url.toLocalFile())
+            if path.exists():
+                self.add_files([path])
 
-    def format_size(bytes_size: int) -> str:
-        """Convert bytes to human-readable size (KB/MB/GB)."""
-        for unit in ['', 'K', 'M', 'G', 'T']:
-            if bytes_size < 1024:
-                return f"{bytes_size:.1f} {unit}B" if unit else f"{bytes_size} B"
-            bytes_size /= 1024
-        return f"{bytes_size:.1f} PB"
+    # --------------------------------------------------
+    # File Handling
+    # --------------------------------------------------
+    def open_file_dialog(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Files",
+            str(Path.home()),
+            "Video Files (*.mp4 *.mkv *.avi *.mov *.webm *.ts)"
+        )
+        self.add_files([Path(f) for f in files])
 
+    def browse_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "Select Output Folder",
+            self.output_edit.text()
+        )
+        if folder:
+            self.output_edit.setText(folder)
 
-    def drop_callback(self, sender, app_data, user_data):
-        """
-        Handles external file/folder drops on Linux.
-        app_data is typically a string: path or file:///path or newline-separated paths.
-        """
-        print(f"Drop received on {sender} | Raw payload: {app_data!r}")
-        print(f"DROP TRIGGERED! Sender: {sender}")
-        print(f"Payload type: {type(app_data)}")
-        print(f"Raw payload: {app_data!r}")
-
-        paths = []
-
-        if isinstance(app_data, str):
-            # Split by newlines (some desktop environments send multiple this way)
-            raw_paths = [p.strip() for p in app_data.splitlines() if p.strip()]
-
-            for raw in raw_paths:
-                path = raw
-                # Handle file:// URI (very common on GNOME/Nautilus)
-                if path.startswith("file://"):
-                    # Convert to local path and decode %20 → space etc.
-                    path = urllib.parse.unquote(urllib.parse.urlparse(path).path)
-                # Skip if not exists or invalid
-                if os.path.exists(path):
-                    paths.append(path)
-                else:
-                    print(f"Ignored invalid path: {path}")
-
-        elif isinstance(self,app_data, (list, tuple)):
-            # Rare, but in case DPG or DE sends a list
-            paths = [p for p in app_data if isinstance(p, str) and os.path.exists(p)]
-
-        else:
-            print(f"Unexpected payload type: {type(app_data)}")
-            return
-
-        if not paths:
-            print("No valid paths dropped")
-            return
-
-        # Now add each file/folder to the table
+    def add_files(self, paths: list[Path]):
         for path in paths:
-            try:
-                size_bytes = os.path.getsize(path) if os.path.isfile(path) else 0
-                display_size = self.format_size(size_bytes)
-                filename = os.path.basename(path) or path  # fallback for folders/root
-            except Exception as e:
-                print(f"Error getting info for {path}: {e}")
-                continue
-
-            # Add a new row dynamically
-            with dpg.table_row(parent="file_list_table"):
-                dpg.add_text(filename)                           # Column 1: Filename
-                dpg.add_text(display_size)                       # Column 2: Size
-                with dpg.group(horizontal=True):                 # Column 3: Remove button placeholder
-                    dpg.add_button(label="X", width=50,
-                                callback=lambda s, a, u: self.remove_row(u),
-                                user_data=path)  # pass path or row tag if you want to remove later
-
-        # Optional: force table redraw / update layout if needed
-        dpg.configure_item("file_list_table", show=True)
-
-
-    def remove_row(self, path_or_tag):
-        """Example remove callback – delete the row containing this path."""
-        # For simplicity: you'd normally store row tags in a dict
-        # Here just print (extend to delete_item(row_tag))
-        print(f"Remove requested for: {path_or_tag}")
-        # dpg.delete_item(row_tag)  # if you saved the row tag
-
-
-    def start_dnd_listener(self, drop_callback):
-        """
-        Creates invisible Tkinter window that listens for file drops
-        and forwards them to DearPyGui.
-        """
-        def tk_thread():
-            root = TkinterDnD.Tk()
-            root.withdraw()  # Hide window
-
-            def handle_drop(event):
-                files = root.tk.splitlist(event.data)
-                drop_callback(files)
-
-            root.drop_target_register(DND_FILES)
-            root.dnd_bind('<<Drop>>', handle_drop)
-
-            root.mainloop()
-
-        thread = threading.Thread(target=tk_thread, daemon=True)
-        thread.start()
-
-    def on_external_drop(self, files):
-        for path in files:
-            if os.path.isdir(path):
-                # optionally walk folder
-                for root, dirs, filenames in os.walk(path):
-                    for f in filenames:
-                        self.add_file(os.path.join(root, f))
-            else:
-                self.add_file(path)
+            if path.is_file() and path not in self.added_files:
+                self.added_files.append(path)
 
         self.refresh_file_list()
 
     def refresh_file_list(self):
-        dpg.delete_item("file_list_table", children_only=True)
+        self.file_table.setRowCount(len(self.added_files))
 
-        # Recreate columns
-        dpg.add_table_column(label="Filename", parent="file_list_table")
-        dpg.add_table_column(label="Size", parent="file_list_table")
-        dpg.add_table_column(label="", parent="file_list_table")
+        for row, path in enumerate(self.added_files):
+            self.file_table.setItem(row, 0, QTableWidgetItem(path.name))
+            size_mb = path.stat().st_size / (1024 * 1024)
+            self.file_table.setItem(row, 1, QTableWidgetItem(f"{size_mb:.1f} MB"))
 
-        for file in self.added_files:
-            size = os.path.getsize(file)
+            remove_button = QPushButton("X")
+            remove_button.clicked.connect(
+                lambda _, p=path: self.remove_file(p)
+            )
+            self.file_table.setCellWidget(row, 2, remove_button)
 
-            with dpg.table_row(parent="file_list_table"):
-                dpg.add_text(os.path.basename(file))
-                dpg.add_text(f"{size/1024:.1f} KB")
-                dpg.add_button(label="X", callback=lambda s, a, u=file: self.remove_file(u))
+    def remove_file(self, path: Path):
+        if path in self.added_files:
+            self.added_files.remove(path)
+            self.refresh_file_list()
 
-    def add_file(self, path):
-        if path not in self.added_files:
-            self.added_files.append(path)
+    def clear_list(self):
+        self.added_files.clear()
+        self.refresh_file_list()
 
-
+    # --------------------------------------------------
+    # Misc
+    # --------------------------------------------------
+    def choose_color(self):
+        color = QColorDialog.getColor()
+        if color.isValid():
+            self.log_edit.append(f"Selected color: {color.name()}")
