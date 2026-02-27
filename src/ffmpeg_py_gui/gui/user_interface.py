@@ -14,6 +14,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+from ffmpeg_py_gui._internal.ffmpeg_api import FFmpegBackend
+from PySide6.QtGui import QMovie
+from PySide6.QtWidgets import QLabel
+from PySide6.QtCore import QSize
 
 # Global state
 class UserInterface(QMainWindow):
@@ -21,6 +25,10 @@ class UserInterface(QMainWindow):
 
     def __init__(self):
         super().__init__()
+
+        self.backend = FFmpegBackend(self)
+
+        
 
         self.setWindowTitle("FFmpeg VA-API Converter")
         self.resize(1000, 700)
@@ -33,6 +41,7 @@ class UserInterface(QMainWindow):
         # --- Main Layout ---
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
+        self.loading_overlay = LoadingOverlay(self)
 
         main_layout = QHBoxLayout(central_widget)
 
@@ -126,6 +135,7 @@ class UserInterface(QMainWindow):
         tab1_layout.addLayout(output_layout)
 
         self.start_button = QPushButton("Start Conversion")
+        self.start_button.clicked.connect(self.start_conversion)
         tab1_layout.addWidget(self.start_button)
 
         self.progress_bar = QProgressBar()
@@ -133,6 +143,23 @@ class UserInterface(QMainWindow):
 
         self.status_label = QLabel("Status: Idle")
         tab1_layout.addWidget(self.status_label)
+
+        self.spinner_label = QLabel()
+        self.spinner_label.setFixedSize(24, 24)
+        self.spinner_label.hide()
+
+        # Load spinner GIF (you need a small loading.gif file)
+        self.spinner_movie = QMovie("loading.gif")
+        self.spinner_movie.setScaledSize(QSize(24, 24))
+        self.spinner_label.setMovie(self.spinner_movie)
+
+        # Add spinner next to status label
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(self.spinner_label)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+
+        tab1_layout.addLayout(status_layout)
 
         tab1_layout.addStretch()
 
@@ -247,3 +274,106 @@ class UserInterface(QMainWindow):
         color = QColorDialog.getColor()
         if color.isValid():
             self.log_edit.append(f"Selected color: {color.name()}")
+
+    def start_conversion(self):
+        if not self.added_files:
+            self.status_label.setText("Status: No files selected")
+            return
+
+        input_file = str(self.added_files[0])
+        output_file = str(Path(self.output_edit.text()) / "output.mp4")
+
+        command = [
+            "ffmpeg",
+            "-y",
+            "-i", input_file,
+            "-c:v", "libx264",
+            output_file
+        ]
+
+        # Busy indicator ON
+        self.start_spinner()
+        self.progress_bar.setRange(0, 0)
+        self.status_label.setText("Status: Running...")
+        
+
+        self.backend.run_command(command)
+
+
+    def update_progress(self, value: float):
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(int(value * 100))
+
+
+    def append_log(self, line: str):
+        self.log_edit.append(line)
+
+
+    def command_finished(self, exit_code: int):
+        self.stop_spinner()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(100)
+        self.status_label.setText(f"Finished (exit code {exit_code})")
+
+
+    def show_error(self, message: str):
+        self.status_label.setText("Error occurred")
+        self.log_edit.append(f"ERROR: {message}")
+        self.stop_spinner()
+
+    def start_spinner(self):
+        """Start animated spinner indicator."""
+        self.loading_overlay.start("test")
+
+
+    def stop_spinner(self):
+        """Stop animated spinner indicator."""
+        self.loading_overlay.stop()
+
+
+class LoadingOverlay(QWidget):
+    """
+    Semi-transparent full-window overlay with centered spinner.
+    Blocks interaction while visible.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet("""
+            background-color: rgba(0, 0, 0, 120);
+        """)
+
+        self.setVisible(False)
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignCenter)
+
+        self.spinner_label = QLabel()
+        self.spinner_label.setAlignment(Qt.AlignCenter)
+
+        self.text_label = QLabel("Working...")
+        self.text_label.setStyleSheet("color: white; font-size: 16px;")
+        self.text_label.setAlignment(Qt.AlignCenter)
+
+        self.movie = QMovie("loading.gif")
+        self.movie.setScaledSize(QSize(64, 64))
+        self.spinner_label.setMovie(self.movie)
+
+        layout.addWidget(self.spinner_label)
+        layout.addWidget(self.text_label)
+
+    def start(self, text="Working..."):
+        self.text_label.setText(text)
+        self.setGeometry(self.parent().rect())
+        self.show()
+        self.movie.start()
+
+    def stop(self):
+        self.movie.stop()
+        self.hide()
+
+    def resizeEvent(self, event):
+        self.setGeometry(self.parent().rect())
+        super().resizeEvent(event)
