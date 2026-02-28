@@ -43,6 +43,7 @@ class UserInterface(QMainWindow):
         self.backend = FFmpegBackend(self)
 
         self.codec_list = []  # type: ignore
+        self.vaapi_device = "/dev/dri/renderD128"
 
         self.setWindowTitle("FFmpeg VA-API Converter")
         self.resize(1000, 700)
@@ -331,19 +332,32 @@ class UserInterface(QMainWindow):
             return
 
         input_file = str(self.added_files[0])
-        output_file = str(Path(self.output_edit.text()) / "output.mp4")
+        output_file = str(Path(self.output_edit.text()) / f"output_{self.codec_combo.currentData()}.mp4")
 
+        hw_accel_args = [
+
+        ]
+           
         extra_args = [
             "-c:v",
-            "libx264",
+            self.codec_combo.currentData(),
+            # "-global_quality",
+            # self.crf_spin.value()
         ]
+        if self.hw_vaapi_checkbox.isChecked():
+            hw_accel_args.extend(["-hwaccel", "vaapi"])
+            hw_accel_args.extend(["-hwaccel_device", self.vaapi_device])
+            hw_accel_args.extend(["-hwaccel_output_format", "vaapi"])
+            #extra_args.extend(["-vf", "format=nv12,hwupload"])
 
+        if self.overwrite_checkbox.isChecked():
+            extra_args.append("-y")
         # Busy indicator ON
         # self.start_spinner()
         self.progress_bar.setRange(0, 0)
         self.status_label.setText("Status: Running...")
 
-        self.backend.run_conversion(input_file, output_file, extra_args)
+        self.backend.run_conversion(input_file, output_file, hw_accel_args, extra_args)
 
     def get_codecs(self) -> None:
         """Fetches the available codecs from the backend."""
@@ -356,8 +370,8 @@ class UserInterface(QMainWindow):
         for codec in codecs:
             description = codec["description"] if len(codec["description"]) < 50 else f"{codec['description'][:50]}..."
             codec_list_entry = f"{codec['codec']} - {description}"
-            self.codec_list.append(codec_list_entry)
-            self.codec_combo.addItem(codec_list_entry)
+            self.codec_list.append({"text":codec_list_entry, "codec_name":codec["codec"]})
+            self.codec_combo.addItem(codec_list_entry, codec["codec"])
 
     def update_progress(self, value: float) -> None:
         """Update progress bar with a value between 0 and 1.
@@ -405,17 +419,18 @@ class UserInterface(QMainWindow):
         """Stop animated spinner indicator."""
         self.loading_overlay.stop()
 
-    def apply_filter_vaapi(self):
+    def apply_filter_vaapi(self) -> None:
         self.codec_combo.clear()
 
         if self.hw_vaapi_checkbox.isChecked():
             # Contains "vaapi" (case insensitive)
-            for codec in self.codec_list:
-                if "_vaapi" in codec.split()[0].lower():
-                    self.codec_combo.addItem(codec)
+            for list_item in self.codec_list:
+                if "_vaapi" in list_item["codec_name"].lower():
+                    self.codec_combo.addItem(list_item["text"], list_item["codec_name"])
         else:
             # Show everything
-            self.codec_combo.addItems(self.codec_list)
+            for list_item in self.codec_list:
+                self.codec_combo.addItem(list_item["text"], list_item["codec_name"])
 
     def apply_filter_vulkan(self):
         self.codec_combo.clear()

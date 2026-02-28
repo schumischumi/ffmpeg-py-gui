@@ -2,6 +2,7 @@
 
 import re
 import subprocess
+import json  # Import inside method if needed
 from collections.abc import Callable
 from typing import Any
 
@@ -109,9 +110,10 @@ class FFmpegBackend:
         self.thread.start()
 
     # Example: Run a conversion command with live progress parsing
-    def run_conversion(self, input_file: str, output_file: str, extra_args: list[str] = None) -> None:
+    def run_conversion(self, input_file: str, output_file: str, hw_accel_args: list[str] = None,  extra_args: list[str] = None) -> None:
         """Run ffmpeg conversion with live progress."""
-        command = ["ffmpeg", "-y", "-i", input_file] + (extra_args or []) + [output_file]
+        command = ["ffmpeg"]  + (hw_accel_args or []) + ["-i", input_file] + (extra_args or []) + [output_file]
+        print(command)
 
         def line_parser(line: str) -> None:
             if "Duration:" in line:
@@ -160,7 +162,7 @@ class FFmpegBackend:
     # Future example: Run ffprobe for file info, parse JSON at end
     def run_get_file_info(self, input_file: str) -> None:
         """Run ffprobe and parse JSON at end."""
-        import json  # Import inside method if needed
+        
 
         command = [
             "ffprobe",
