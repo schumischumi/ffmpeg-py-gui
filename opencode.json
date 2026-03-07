@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "mistralai/ministral-3-14b-reasoning": {
+          "name": "mistral 3(local)"
+        },
+        "qwen/qwen2.5-coder-14b": {
+          "name": "qwen/qwen2.5-coder-14b"
+        },
+        "deepseek-coder-33b-instruct": {
+          "name": "deep"
+        },
+        "Br1LDu/DeepSeek_DeepSeekR1DistillQwen14B_Couplet_1500steps_gguf": {
+          "name": "deep Qwen14B"
+        },
+        "qwen/qwen3.5-9b": {
+          "name": "qwen/qwen3.5-9b"
+        },
+        "lmstudio-community/qwen3-coder-30b-a3b-instruct": {
+          "name": "qwen3-coder-30b-a3b-instruct studio"
+        },
+        "codellama-13b-instruct@q3_k_s": {
+          "name": "codellama-13b-instruct@q3_k_s"
+        },
+        "mistralai/devstral-small-2-2512": {
+          "name": "mistralai/devstral-small-2-2512"
+        },
+        "huihui-qwen3-coder-30b-a3b-instruct-abliterated-i1": {
+          "name": "huihui-qwen3-coder-30b-a3b-instruct-abliterated-i1"
+        },
+        "zai-org/glm-4.6v-flash": {
+          "name": "zai-org/glm-4.6v-flash"
+        }
+      }
+    }
+  }
+}
+// my code works as expected but the structure of the files in src/ffmpeg_py_gui is a complete mess. refactor the classes to be cleaner and easier to maintain. stick to pyside6 and dont install or use further packages.
